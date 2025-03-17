@@ -14,18 +14,25 @@ logging.basicConfig(level=logging.INFO)
 # Set page config
 st.set_page_config(page_title="Legal Case Analyzer", layout="wide")
 
-# Fixed service account configuration
-SERVICE_ACCOUNT_FILE = "lawyerllmcase_credentials.json"  # Path to your service account JSON file
-
 # Function to get credentials
 @st.cache_resource
 def get_credentials():
     try:
-        credentials = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE)
-        return credentials
+        # For local development with file
+        if os.path.exists("lawyerllmcase_credentials.json"):
+            credentials = service_account.Credentials.from_service_account_file("lawyerllmcase_credentials.json")
+            return credentials
+        # For Streamlit Cloud deployment using secrets
+        elif "google_credentials" in st.secrets:
+            credentials_dict = st.secrets["google_credentials"]
+            credentials = service_account.Credentials.from_service_account_info(credentials_dict)
+            return credentials
+        else:
+            st.sidebar.error("No credentials found in file or Streamlit secrets")
+            return None
     except Exception as e:
         st.sidebar.error(f"Error loading service account: {str(e)}")
-        st.sidebar.info("Please ensure the service account JSON file is in the correct location.")
+        st.sidebar.info("Please ensure credentials are properly configured.")
         return None
 
 # Function to configure the Gemini API with service account

@@ -266,7 +266,7 @@ Faça upload de até **10 PDFs** (cada PDF representa um processo diferente) e o
 2. **Análise do caso + próximos passos**  
 3. **Petição sugerida**  
 
-Você pode exportar todas as análises em lote como arquivos TXT ou DOCX.
+Você pode exportar todas as análises em lote como arquivos TXT, DOCX ou HTML.
 """)
 
 api_ready = configure_gemini()
@@ -405,42 +405,30 @@ if files:
                     )
         
         # ------------------------------------------------------------------------------
-        # Exportação em lote
+        # Exportação em lote (FIXED VERSION)
         # ------------------------------------------------------------------------------
         
         st.header("📦 Exportação em Lote")
         
-        # Inicializa estados para controlar downloads
-        if 'show_txt_download' not in st.session_state:
-            st.session_state.show_txt_download = False
-        if 'show_docx_download' not in st.session_state:
-            st.session_state.show_docx_download = False
-        if 'show_html_download' not in st.session_state:
-            st.session_state.show_html_download = False
-        
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            if st.button("📄 Preparar TXT", type="secondary"):
+            if st.button("📄 Gerar e Baixar TXT", type="secondary"):
                 try:
                     with st.spinner("Criando arquivos TXT..."):
-                        st.session_state.txt_zip_buffer = create_zip_with_all_analyses(st.session_state.all_analyses, "txt")
-                        st.session_state.show_txt_download = True
-                        st.rerun()
+                        zip_buffer = create_zip_with_all_analyses(st.session_state.all_analyses, "txt")
+                        st.download_button(
+                            label="💾 Download ZIP - TXT",
+                            data=zip_buffer.getvalue(),
+                            file_name=f"analises_juridicas_txt_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+                            mime="application/zip",
+                            key="download_txt_ready"
+                        )
                 except Exception as e:
                     st.error(f"Erro ao criar arquivos TXT: {str(e)}")
-            
-            if st.session_state.show_txt_download:
-                st.download_button(
-                    label="💾 Download ZIP - TXT",
-                    data=st.session_state.txt_zip_buffer.getvalue(),
-                    file_name=f"analises_juridicas_txt_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
-                    mime="application/zip",
-                    key="download_txt"
-                )
         
         with col2:
-            docx_button_label = "📝 Preparar DOCX"
+            docx_button_label = "📝 Gerar e Baixar DOCX"
             docx_button_disabled = False
             
             if not DOCX_AVAILABLE:
@@ -451,55 +439,36 @@ if files:
             if st.button(docx_button_label, type="secondary", disabled=docx_button_disabled):
                 try:
                     with st.spinner("Criando arquivos DOCX..."):
-                        st.session_state.docx_zip_buffer = create_zip_with_all_analyses(st.session_state.all_analyses, "docx")
-                        st.session_state.show_docx_download = True
-                        st.rerun()
+                        zip_buffer = create_zip_with_all_analyses(st.session_state.all_analyses, "docx")
+                        st.download_button(
+                            label="💾 Download ZIP - DOCX",
+                            data=zip_buffer.getvalue(),
+                            file_name=f"analises_juridicas_docx_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+                            mime="application/zip",
+                            key="download_docx_ready"
+                        )
                 except Exception as e:
                     st.error(f"Erro ao criar arquivos DOCX: {str(e)}")
-            
-            if st.session_state.show_docx_download and DOCX_AVAILABLE:
-                st.download_button(
-                    label="💾 Download ZIP - DOCX",
-                    data=st.session_state.docx_zip_buffer.getvalue(),
-                    file_name=f"analises_juridicas_docx_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
-                    mime="application/zip",
-                    key="download_docx"
-                )
         
         with col3:
-            if st.button("🌐 Preparar HTML", type="secondary"):
+            if st.button("🌐 Gerar e Baixar HTML", type="secondary"):
                 try:
                     with st.spinner("Criando arquivos HTML..."):
-                        st.session_state.html_zip_buffer = create_zip_with_all_analyses(st.session_state.all_analyses, "html")
-                        st.session_state.show_html_download = True
-                        st.success("✅ Arquivos HTML criados com sucesso!")
-                        st.rerun()
+                        zip_buffer = create_zip_with_all_analyses(st.session_state.all_analyses, "html")
+                        st.download_button(
+                            label="💾 Download ZIP - HTML",
+                            data=zip_buffer.getvalue(),
+                            file_name=f"analises_juridicas_html_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+                            mime="application/zip",
+                            key="download_html_ready"
+                        )
                 except Exception as e:
                     st.error(f"Erro ao criar arquivos HTML: {str(e)}")
-            
-            if st.session_state.show_html_download:
-                st.download_button(
-                    label="💾 Download ZIP - HTML",
-                    data=st.session_state.html_zip_buffer.getvalue(),
-                    file_name=f"analises_juridicas_html_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
-                    mime="application/zip",
-                    key="download_html"
-                )
-        
-        # Botão para limpar downloads
-        if any([st.session_state.get('show_txt_download', False), 
-                st.session_state.get('show_docx_download', False), 
-                st.session_state.get('show_html_download', False)]):
-            if st.button("🗑️ Limpar downloads preparados", type="secondary"):
-                st.session_state.show_txt_download = False
-                st.session_state.show_docx_download = False  
-                st.session_state.show_html_download = False
-                st.rerun()
         
         if DOCX_AVAILABLE:
-            st.info("💡 Clique em 'Preparar' para gerar os arquivos, depois clique em 'Download' para baixar o ZIP.")
+            st.info("💡 Clique nos botões acima para gerar e baixar os arquivos ZIP com todas as análises.")
         else:
-            st.info("💡 Clique em 'Preparar' para gerar os arquivos. Para DOCX, instale: pip install python-docx")
+            st.info("💡 Clique nos botões acima para gerar e baixar os arquivos. Para DOCX, instale: pip install python-docx")
 
 else:
     st.info("📤 Envie até 10 PDFs para começar (cada PDF representa um processo diferente).")

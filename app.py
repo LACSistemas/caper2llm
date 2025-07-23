@@ -8,8 +8,12 @@ from datetime import datetime
 import logging
 import zipfile
 import io
-from docx import Document
-from docx.shared import Inches
+try:
+    from docx import Document
+    from docx.shared import Inches
+    DOCX_AVAILABLE = True
+except ImportError:
+    DOCX_AVAILABLE = False
 
 # ───────────────────────────── Configurações básicas ────────────────────────────
 logging.basicConfig(level=logging.INFO)
@@ -70,24 +74,138 @@ def create_docx_from_analysis(case_name: str, analyses: dict) -> io.BytesIO:
     """
     Cria um documento DOCX com todas as análises de um processo
     """
-    doc = Document()
+    if not DOCX_AVAILABLE:
+        raise ImportError("python-docx não está disponível")
     
-    # Título do documento
-    title = doc.add_heading(f'Análise Jurídica - {case_name}', 0)
-    doc.add_paragraph(f'Data de geração: {datetime.now().strftime("%d/%m/%Y às %H:%M")}')
-    doc.add_paragraph()
+    try:
+        doc = Document()
+        
+        # Título do documento
+        title = doc.add_heading(f'Análise Jurídica - {case_name}', 0)
+        doc.add_paragraph(f'Data de geração: {datetime.now().strftime("%d/%m/%Y às %H:%M")}')
+        doc.add_paragraph()
+        
+        # Adiciona cada análise
+        for analysis_type, content in analyses.items():
+            doc.add_heading(analysis_type, level=1)
+            # Divide o conteúdo em parágrafos para melhor formatação
+            paragraphs = content.split('\n\n')
+            for paragraph in paragraphs:
+                if paragraph.strip():
+                    doc.add_paragraph(paragraph.strip())
+            doc.add_page_break()
+        
+        # Salva em BytesIO
+        docx_buffer = io.BytesIO()
+        doc.save(docx_buffer)
+        docx_buffer.seek(0)
+        return docx_buffer
     
-    # Adiciona cada análise
-    for analysis_type, content in analyses.items():
-        doc.add_heading(analysis_type, level=1)
-        doc.add_paragraph(content)
-        doc.add_page_break()
+    except Exception as e:
+        raise Exception(f"Erro ao criar documento DOCX: {str(e)}")
+
+
+def create_html_from_analysis(case_name: str, analyses: dict) -> str:
+    """
+    Alternativa: Cria um HTML bem formatado com todas as análises
+    """
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Análise Jurídica - {case_name}</title>
+        <style>
+            body {{
+                font-family: 'Times New Roman', serif;
+                line-height: 1.6;
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 20px;
+                color: #333;
+            }}
+            h1 {{
+                color: #2c3e50;
+                border-bottom: 3px solid #3498db;
+                padding-bottom: 10px;
+            }}
+            h2 {{
+                color: #34495e;
+                margin-top: 30px;
+                border-left: 4px solid #3498db;
+                padding-left: 15px;
+            }}
+            .header {{
+                text-align: center;
+                margin-bottom: 40px;
+                border-bottom: 1px solid #bdc3c7;
+                padding-bottom: 20px;
+            }}
+            .analysis-section {{
+                margin-bottom: 40px;
+                padding: 20px;
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                border-left: 4px solid #3498db;
+            }}
+            .date {{
+                color: #7f8c8d;
+                font-style: italic;
+            }}
+            p {{
+                text-align: justify;
+                margin-bottom: 15px;
+            }}
+            .page-break {{
+                page-break-before: always;
+            }}
+            @media print {{
+                body {{
+                    max-width: none;
+                    margin: 0;
+                }}
+                .analysis-section {{
+                    break-inside: avoid;
+                }}
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>Análise Jurídica</h1>
+            <h2>{case_name}</h2>
+            <p class="date">Data de geração: {datetime.now().strftime("%d/%m/%Y às %H:%M")}</p>
+        </div>
+    """
     
-    # Salva em BytesIO
-    docx_buffer = io.BytesIO()
-    doc.save(docx_buffer)
-    docx_buffer.seek(0)
-    return docx_buffer
+    for i, (analysis_type, content) in enumerate(analyses.items()):
+        page_break_class = "page-break" if i > 0 else ""
+        html_content += f"""
+        <div class="analysis-section {page_break_class}">
+            <h2>{analysis_type}</h2>
+            <div>
+        """
+        
+        # Converte quebras de linha em parágrafos HTML
+        paragraphs = content.split('\n\n')
+        for paragraph in paragraphs:
+            if paragraph.strip():
+                # Substitui quebras de linha simples por <br>
+                formatted_paragraph = paragraph.strip().replace('\n', '<br>')
+                html_content += f"<p>{formatted_paragraph}</p>"
+        
+        html_content += """
+            </div>
+        </div>
+        """
+    
+    html_content += """
+    </body>
+    </html>
+    """
+    
+    return html_content
 
 
 def create_zip_with_all_analyses(all_analyses: dict, format_type: str = "txt") -> io.BytesIO:
@@ -117,9 +235,21 @@ def create_zip_with_all_analyses(all_analyses: dict, format_type: str = "txt") -
                 zip_file.writestr(f"{safe_case_name}_{timestamp}.txt", txt_content.encode('utf-8'))
                 
             elif format_type == "docx":
-                # Cria um arquivo DOCX para cada processo
-                docx_buffer = create_docx_from_analysis(case_name, analyses)
-                zip_file.writestr(f"{safe_case_name}_{timestamp}.docx", docx_buffer.getvalue())
+                try:
+                    # Cria um arquivo DOCX para cada processo
+                    docx_buffer = create_docx_from_analysis(case_name, analyses)
+                    zip_file.writestr(f"{safe_case_name}_{timestamp}.docx", docx_buffer.getvalue())
+                except Exception as e:
+                    # Se falhar, cria um arquivo de erro
+                    error_content = f"Erro ao criar DOCX para {case_name}: {str(e)}\n\nConteúdo em texto:\n\n"
+                    for analysis_type, content in analyses.items():
+                        error_content += f"{analysis_type}:\n{content}\n\n"
+                    zip_file.writestr(f"{safe_case_name}_{timestamp}_ERROR.txt", error_content.encode('utf-8'))
+                    
+            elif format_type == "html":
+                # Cria um arquivo HTML para cada processo
+                html_content = create_html_from_analysis(case_name, analyses)
+                zip_file.writestr(f"{safe_case_name}_{timestamp}.html", html_content.encode('utf-8'))
     
     zip_buffer.seek(0)
     return zip_buffer
@@ -280,31 +410,62 @@ if files:
         
         st.header("📦 Exportação em Lote")
         
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         
         with col1:
             if st.button("📄 Exportar todos como TXT", type="secondary"):
-                zip_buffer = create_zip_with_all_analyses(st.session_state.all_analyses, "txt")
-                
-                st.download_button(
-                    label="💾 Download ZIP com arquivos TXT",
-                    data=zip_buffer.getvalue(),
-                    file_name=f"analises_juridicas_txt_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
-                    mime="application/zip"
-                )
+                try:
+                    zip_buffer = create_zip_with_all_analyses(st.session_state.all_analyses, "txt")
+                    
+                    st.download_button(
+                        label="💾 Download ZIP com arquivos TXT",
+                        data=zip_buffer.getvalue(),
+                        file_name=f"analises_juridicas_txt_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+                        mime="application/zip"
+                    )
+                except Exception as e:
+                    st.error(f"Erro ao criar arquivos TXT: {str(e)}")
         
         with col2:
-            if st.button("📝 Exportar todos como DOCX", type="secondary"):
-                zip_buffer = create_zip_with_all_analyses(st.session_state.all_analyses, "docx")
-                
-                st.download_button(
-                    label="💾 Download ZIP com arquivos DOCX",
-                    data=zip_buffer.getvalue(),
-                    file_name=f"analises_juridicas_docx_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
-                    mime="application/zip"
-                )
+            docx_button_label = "📝 Exportar todos como DOCX"
+            docx_button_disabled = False
+            
+            if not DOCX_AVAILABLE:
+                docx_button_label += " (Indisponível)"
+                docx_button_disabled = True
+                st.warning("⚠️ python-docx não está instalado. Instale com: pip install python-docx")
+            
+            if st.button(docx_button_label, type="secondary", disabled=docx_button_disabled):
+                try:
+                    zip_buffer = create_zip_with_all_analyses(st.session_state.all_analyses, "docx")
+                    
+                    st.download_button(
+                        label="💾 Download ZIP com arquivos DOCX",
+                        data=zip_buffer.getvalue(),
+                        file_name=f"analises_juridicas_docx_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+                        mime="application/zip"
+                    )
+                except Exception as e:
+                    st.error(f"Erro ao criar arquivos DOCX: {str(e)}")
         
-        st.info("💡 Os arquivos serão compactados em um ZIP contendo uma análise completa para cada processo.")
+        with col3:
+            if st.button("🌐 Exportar todos como HTML", type="secondary"):
+                try:
+                    zip_buffer = create_zip_with_all_analyses(st.session_state.all_analyses, "html")
+                    
+                    st.download_button(
+                        label="💾 Download ZIP com arquivos HTML",
+                        data=zip_buffer.getvalue(),
+                        file_name=f"analises_juridicas_html_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+                        mime="application/zip"
+                    )
+                except Exception as e:
+                    st.error(f"Erro ao criar arquivos HTML: {str(e)}")
+        
+        if DOCX_AVAILABLE:
+            st.info("💡 Os arquivos serão compactados em um ZIP contendo uma análise completa para cada processo.")
+        else:
+            st.info("💡 Os arquivos serão compactados em um ZIP. Para DOCX, instale: pip install python-docx")
 
 else:
     st.info("📤 Envie até 10 PDFs para começar (cada PDF representa um processo diferente).")
